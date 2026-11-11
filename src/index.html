@@ -1,0 +1,76 @@
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; connect-src 'self' https://raw.githubusercontent.com;">
+  <title>DramaTV</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="titlebar">
+      <div class="brand">
+        <span class="brand-icon">D</span>
+        <span>Drama<span class="red">TV</span></span>
+      </div>
+      <div class="window-controls">
+        <button data-window-action="minimize">−</button>
+        <button data-window-action="maximize">□</button>
+        <button class="close" data-window-action="close">×</button>
+      </div>
+    </header>
+
+    <aside class="sidebar">
+      <div class="sidebar-brand">DRAMATV</div>
+      <nav>
+        <button class="nav-item active" data-page="home">⌂ <span>الرئيسية</span></button>
+        <button class="nav-item" data-page="movies">▣ <span>الأفلام</span></button>
+        <button class="nav-item" data-page="series">▤ <span>المسلسلات</span></button>
+      </nav>
+      <div class="sidebar-footer">عالمك للترفيه</div>
+    </aside>
+
+    <main class="content">
+      <section class="welcome" id="welcome">
+        <div class="welcome-text">
+          <span class="eyebrow">WELCOME TO DRAMATV</span>
+          <h1>عالمك للترفيه</h1>
+          <p>مكتبتك من الأفلام والمسلسلات في مكان واحد.</p>
+          <button class="primary-button" data-page="movies">اكتشف الأفلام</button>
+        </div>
+        <div class="hero-logo">D<span>TV</span></div>
+      </section>
+
+      <section class="catalog-section">
+        <div class="section-heading">
+          <div>
+            <h2 id="page-title">الرئيسية</h2>
+            <p id="page-description">اختار القسم واستكشف المكتبة.</p>
+          </div>
+          <div class="search-box">
+            <input id="search-input" type="search"
+              placeholder="ابحث عن فيلم أو مسلسل..."
+              autocomplete="off">
+          </div>
+        </div>
+
+        <div id="status" class="status" role="status">
+          جاهز لعرض المكتبة
+        </div>
+
+        <div id="catalog-grid" class="catalog-grid"></div>
+
+        <div class="load-more-wrap">
+          <button id="load-more" class="secondary-button" hidden>
+            تحميل المزيد
+          </button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
