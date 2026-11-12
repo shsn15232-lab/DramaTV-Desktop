@@ -24,7 +24,8 @@
     },
     "files": [
       "src/**/*",
-      "package.json"
+      "package.json",
+      "DramaTV(1).ico"
     ],
     "win": {
       "icon": "DramaTV(1).ico",
