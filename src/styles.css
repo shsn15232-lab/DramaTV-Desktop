@@ -17,6 +17,12 @@
   --border: #252025;
 }
 
+html,
+body {
+  width: 100%;
+  height: 100%;
+}
+
 body {
   background: var(--bg);
   color: var(--text);
@@ -24,7 +30,8 @@ body {
   overflow: hidden;
 }
 
-button, input {
+button,
+input {
   font: inherit;
 }
 
@@ -33,8 +40,15 @@ button {
   border: none;
 }
 
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--red-light);
+  outline-offset: 3px;
+}
+
 .app {
   height: 100vh;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background:
@@ -175,6 +189,7 @@ button {
   margin-right: 235px;
   margin-top: 58px;
   height: calc(100vh - 58px);
+  min-height: 0;
   overflow-y: auto;
   padding: 35px 42px 70px;
   direction: rtl;
@@ -189,6 +204,10 @@ button {
 .content::-webkit-scrollbar-thumb {
   background: #49252c;
   border-radius: 10px;
+}
+
+.content::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* WELCOME */
@@ -219,6 +238,7 @@ button {
   right: 48%;
   top: -110px;
   box-shadow: 0 0 0 35px #e5091408, 0 0 0 70px #e5091405;
+  pointer-events: none;
 }
 
 .welcome-text {
@@ -243,6 +263,7 @@ button {
   color: #aaa;
   font-size: 16px;
   margin-bottom: 25px;
+  line-height: 1.8;
 }
 
 .primary-button {
@@ -291,10 +312,13 @@ button {
 .catalog-heading p {
   color: var(--muted);
   font-size: 14px;
+  line-height: 1.8;
 }
 
 .catalog-heading {
-  margin-bottom: 24px;
+  grid-column: 1 / -1;
+  width: 100%;
+  margin-bottom: 8px;
 }
 
 .section-heading {
@@ -327,6 +351,7 @@ button {
 
 .search-box input {
   width: 100%;
+  min-width: 0;
   outline: none;
   border: none;
   background: transparent;
@@ -345,6 +370,7 @@ button {
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 22px 17px;
   direction: rtl;
+  align-items: start;
 }
 
 .catalog-card {
@@ -432,6 +458,7 @@ button {
   color: #8d858b;
   font-size: 11px;
   margin-top: 5px;
+  line-height: 1.6;
 }
 
 /* STATUS */
@@ -441,6 +468,7 @@ button {
   font-size: 13px;
   margin: 15px 0;
   min-height: 20px;
+  line-height: 1.7;
 }
 
 .status.error {
@@ -459,6 +487,7 @@ button {
   background: #101012;
   border-radius: 16px;
   padding: 25px;
+  line-height: 1.8;
 }
 
 /* LOAD MORE */
@@ -501,8 +530,12 @@ button {
 }
 
 @keyframes overlayIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .details-panel {
@@ -519,6 +552,15 @@ button {
   text-align: right;
   scrollbar-width: thin;
   scrollbar-color: #71303a transparent;
+}
+
+.details-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.details-panel::-webkit-scrollbar-thumb {
+  background: #71303a;
+  border-radius: 10px;
 }
 
 .details-panel h2 {
@@ -652,6 +694,7 @@ button {
 
 .player-panel {
   width: min(1100px, 100%);
+  max-height: 94vh;
   overflow: hidden;
   border-radius: 19px;
   background: #09090a;
@@ -681,6 +724,7 @@ button {
 .player-top button {
   width: 34px;
   height: 34px;
+  flex-shrink: 0;
   border-radius: 9px;
   color: #ddd;
   background: #272025;
@@ -725,6 +769,7 @@ button {
   justify-content: center;
   text-align: center;
   gap: 12px;
+  padding: 25px;
 }
 
 .empty-icon {
@@ -747,6 +792,7 @@ button {
 .empty-state p {
   color: #777;
   font-size: 13px;
+  line-height: 1.8;
 }
 
 /* RESPONSIVE */
@@ -844,5 +890,16 @@ button {
 
   .episode-row {
     padding: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
   }
 }
