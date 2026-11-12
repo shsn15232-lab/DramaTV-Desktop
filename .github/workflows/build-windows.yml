@@ -23,7 +23,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-                    # npm cache disabled
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
@@ -37,3 +36,4 @@ jobs:
           name: DramaTV-Windows
           path: dist/*.exe
           if-no-files-found: error
+          retention-days: 14
