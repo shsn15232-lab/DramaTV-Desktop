@@ -1,8 +1,21 @@
 
-const { app, BrowserWindow, ipcMain } = require("electron");
+const {
+  app,
+  BrowserWindow,
+  ipcMain
+} = require("electron");
+
 const path = require("path");
 
-let mainWindow;
+let mainWindow = null;
+
+function isTrustedWindow(event) {
+  return (
+    mainWindow !== null &&
+    !mainWindow.isDestroyed() &&
+    event.sender === mainWindow.webContents
+  );
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -11,34 +24,53 @@ function createWindow() {
     minWidth: 1000,
     minHeight: 650,
     backgroundColor: "#070708",
+    title: "DramaTV",
     frame: false,
     autoHideMenuBar: true,
     show: false,
+
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      webSecurity: true
     }
   });
 
-  mainWindow.loadFile(path.join(__dirname, "index.html"));
+  mainWindow.webContents.setWindowOpenHandler(() => {
+    return { action: "deny" };
+  });
+
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (!url.startsWith("file://")) {
+      event.preventDefault();
+    }
+  });
 
   mainWindow.once("ready-to-show", () => {
-    mainWindow.show();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+    }
   });
 
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
+
+  mainWindow.loadFile(path.join(__dirname, "index.html"));
 }
 
-ipcMain.on("window-minimize", () => {
-  mainWindow?.minimize();
+/* WINDOW CONTROLS */
+
+ipcMain.on("window-minimize", event => {
+  if (!isTrustedWindow(event)) return;
+
+  mainWindow.minimize();
 });
 
-ipcMain.on("window-maximize", () => {
-  if (!mainWindow) return;
+ipcMain.on("window-maximize", event => {
+  if (!isTrustedWindow(event)) return;
 
   if (mainWindow.isMaximized()) {
     mainWindow.unmaximize();
@@ -47,11 +79,17 @@ ipcMain.on("window-maximize", () => {
   }
 });
 
-ipcMain.on("window-close", () => {
-  mainWindow?.close();
+ipcMain.on("window-close", event => {
+  if (!isTrustedWindow(event)) return;
+
+  mainWindow.close();
 });
 
+/* APPLICATION */
+
 app.whenReady().then(() => {
+  app.setAppUserModelId("com.dramatv.desktop");
+
   createWindow();
 
   app.on("activate", () => {
