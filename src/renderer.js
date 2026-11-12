@@ -425,11 +425,14 @@ function showDetails(item, type) {
   if (type === "movies") {
     panel.appendChild(
       makeButton(
-        "اختيار ملف الفيلم وتشغيله",
+        "تشغيل الفيلم",
         "primary-button",
         () => {
           overlay.remove();
-          chooseLocalVideo(getName(item));
+          playRemoteVideo(
+            item.direct_stream_link,
+            getName(item)
+          );
         }
       )
     );
@@ -503,10 +506,11 @@ function renderSeasons(panel, item) {
       episodeInfo.append(episodeName, episodeNumber);
 
       const playButton = makeButton(
-        "اختيار ملف الحلقة",
+        "تشغيل الحلقة",
         "primary-button",
         () => {
-          chooseLocalVideo(
+          playRemoteVideo(
+            episode.direct_stream_link,
             getName(item) + " - " + episodeName.textContent
           );
         }
@@ -525,7 +529,30 @@ function renderSeasons(panel, item) {
   });
 }
 
-/* LOCAL VIDEO PLAYER */
+/* VIDEO PLAYER */
+
+function playRemoteVideo(rawUrl, title) {
+  let parsed;
+
+  try {
+    parsed = new URL(String(rawUrl || "").trim());
+  } catch {
+    setStatus("رابط التشغيل غير متوفر أو غير صالح.");
+    return;
+  }
+
+  if (
+    parsed.protocol !== "http:" &&
+    parsed.protocol !== "https:"
+  ) {
+    setStatus("نوع رابط التشغيل غير مدعوم.");
+    return;
+  }
+
+  openPlayer(parsed.href, title);
+}
+
+/* LOCAL VIDEO FALLBACK */
 
 function chooseLocalVideo(title) {
   const input = document.createElement("input");
@@ -571,14 +598,29 @@ function openPlayer(url, title) {
   video.className = "drama-video";
   video.controls = true;
   video.autoplay = true;
+  video.playsInline = true;
   video.preload = "metadata";
   video.src = url;
 
   video.addEventListener("error", () => {
-    setStatus("تعذر تشغيل الملف. قد يكون الترميز غير مدعوم.");
+    setStatus(
+      "تعذر تشغيل الفيديو. قد يكون الرابط متوقفاً أو الترميز غير مدعوم."
+    );
+  });
+
+  video.addEventListener("playing", () => {
+    setStatus("يتم تشغيل الفيديو الآن.");
   });
 
   panel.append(top, video);
+
+  const playPromise = video.play();
+
+  if (playPromise && typeof playPromise.catch === "function") {
+    playPromise.catch(error => {
+      console.warn("Autoplay prevented:", error);
+    });
+  }
 }
 
 function closePlayer() {
@@ -597,7 +639,10 @@ function closePlayer() {
   }
 
   if (state.playerUrl) {
-    URL.revokeObjectURL(state.playerUrl);
+    if (state.playerUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(state.playerUrl);
+    }
+
     state.playerUrl = null;
   }
 }
@@ -684,7 +729,6 @@ async function loadNextPart() {
     if (requestId !== state.requestId) return;
 
     const type = state.page;
-
     const combined = state.items.concat(items);
 
     state.items = uniqueItems(combined, type);
@@ -702,13 +746,15 @@ async function loadNextPart() {
     }
 
   } finally {
-    state.loading = false;
+    if (requestId === state.requestId) {
+      state.loading = false;
 
-    loadMoreButton.disabled = false;
-    loadMoreButton.textContent = "تحميل المزيد";
+      loadMoreButton.disabled = false;
+      loadMoreButton.textContent = "تحميل المزيد";
 
-    if (state.page === "home") {
-      loadMoreButton.hidden = true;
+      if (state.page === "home") {
+        loadMoreButton.hidden = true;
+      }
     }
   }
 }
