@@ -2,7 +2,8 @@
 const {
   app,
   BrowserWindow,
-  ipcMain
+  ipcMain,
+  dialog
 } = require("electron");
 
 const path = require("path");
@@ -46,6 +47,16 @@ function createWindow() {
     if (!url.startsWith("file://")) {
       event.preventDefault();
     }
+  });
+
+  mainWindow.webContents.on("did-fail-load", (event, code, description, url, isMainFrame) => {
+    if (!isMainFrame) return;
+
+    console.error("DramaTV load error:", {
+      code,
+      description,
+      url
+    });
   });
 
   mainWindow.once("ready-to-show", () => {
@@ -103,4 +114,8 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
+});
+
+app.on("render-process-gone", (event, webContents, details) => {
+  console.error("DramaTV renderer stopped:", details);
 });
