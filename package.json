@@ -27,18 +27,15 @@
       "package.json"
     ],
     "win": {
+      "icon": "DramaTV(1).ico",
       "target": [
         {
           "target": "nsis",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         },
         {
           "target": "portable",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         }
       ]
     },
