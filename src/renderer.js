@@ -2,6 +2,9 @@
 const DATA_BASE =
   "https://raw.githubusercontent.com/shsn15232-lab/DramaTV-Data/main/";
 
+const DB_NAME = "DramaTV_Catalog";
+const DB_STORE = "repository_cache";
+
 const state = {
   page: "home",
   indexes: {},
@@ -32,31 +35,129 @@ function setStatus(message) {
   statusBox.textContent = message;
 }
 
-async function fetchJson(url) {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error("فشل تحميل البيانات: " + response.status);
-  }
-  return response.json();
+/* DATABASE */
+
+let databasePromise = null;
+
+function openCatalogDB() {
+  if (databasePromise) return databasePromise;
+
+  databasePromise = new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+
+      if (!db.objectStoreNames.contains(DB_STORE)) {
+        db.createObjectStore(DB_STORE);
+      }
+    };
+
+    request.onsuccess = () => resolve(request.result);
+
+    request.onerror = () => {
+      databasePromise = null;
+      reject(request.error);
+    };
+  });
+
+  return databasePromise;
 }
 
+async function readCatalogCache(url) {
+  try {
+    const db = await openCatalogDB();
+
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction(DB_STORE, "readonly");
+      const request = transaction.objectStore(DB_STORE).get(url);
+
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.warn("Cache read:", error);
+    return null;
+  }
+}
+
+async function saveCatalogCache(url, data) {
+  try {
+    const db = await openCatalogDB();
+
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction(DB_STORE, "readwrite");
+
+      transaction.objectStore(DB_STORE).put(data, url);
+
+      transaction.oncomplete = resolve;
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  } catch (error) {
+    console.warn("Cache save:", error);
+  }
+}
+
+/* FETCH WITH OFFLINE CACHE */
+
+async function fetchJson(url) {
+  try {
+    const response = await fetch(url, {
+      cache: "no-cache"
+    });
+
+    if (!response.ok) {
+      throw new Error("فشل تحميل البيانات: " + response.status);
+    }
+
+    const data = await response.json();
+
+    await saveCatalogCache(url, data);
+
+    return data;
+
+  } catch (error) {
+    console.warn("Repository unavailable, using cache:", error);
+
+    const cached = await readCatalogCache(url);
+
+    if (cached) return cached;
+
+    throw error;
+  }
+}
+
+/* INDEXES */
+
 async function getIndex(type) {
-  if (state.indexes[type]) return state.indexes[type];
+  if (state.indexes[type]) {
+    return state.indexes[type];
+  }
 
   const file = type === "movies"
     ? "movies_index.json"
     : "series_index.json";
 
   const index = await fetchJson(DATA_BASE + file);
+
+  if (!Array.isArray(index.parts)) {
+    throw new Error("فهرس المكتبة غير صالح");
+  }
+
   state.indexes[type] = index;
+
   return index;
 }
+
+/* DATA HELPERS */
 
 function normalizeItems(data) {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data.movies)) return data.movies;
   if (Array.isArray(data.series)) return data.series;
   if (Array.isArray(data.data)) return data.data;
+
   return [];
 }
 
@@ -74,11 +175,15 @@ function getDescription(item) {
 
 function makeButton(text, className, action) {
   const button = document.createElement("button");
+
   button.textContent = text;
   button.className = className;
   button.addEventListener("click", action);
+
   return button;
 }
+
+/* CATALOG CARDS */
 
 function createCard(item, type) {
   const card = document.createElement("article");
@@ -91,6 +196,7 @@ function createCard(item, type) {
 
   if (cover) {
     const image = document.createElement("img");
+
     image.src = cover;
     image.alt = getName(item);
     image.loading = "lazy";
@@ -103,6 +209,7 @@ function createCard(item, type) {
     };
 
     imageBox.appendChild(image);
+
   } else {
     imageBox.classList.add("poster-fallback");
     imageBox.textContent = "DramaTV";
@@ -115,7 +222,9 @@ function createCard(item, type) {
   name.textContent = getName(item);
 
   const meta = document.createElement("p");
+
   const genre = item.genre || item.category || "";
+
   const rating = item.rating && item.rating !== "0"
     ? " ★ " + item.rating
     : "";
@@ -125,18 +234,25 @@ function createCard(item, type) {
   info.append(name, meta);
   card.append(imageBox, info);
 
-  card.addEventListener("click", () => showDetails(item, type));
+  card.addEventListener("click", () => {
+    showDetails(item, type);
+  });
 
   return card;
 }
 
+/* OVERLAYS */
+
 function createOverlay(id, panelClass) {
   const old = document.getElementById(id);
+
   if (old) old.remove();
 
   const overlay = document.createElement("div");
   overlay.id = id;
-  overlay.className = "details-overlay";
+  overlay.className = id === "player-overlay"
+    ? "player-overlay"
+    : "details-overlay";
 
   const panel = document.createElement("div");
   panel.className = panelClass;
@@ -144,20 +260,35 @@ function createOverlay(id, panelClass) {
   overlay.appendChild(panel);
 
   overlay.addEventListener("click", event => {
-    if (event.target === overlay) overlay.remove();
+    if (event.target === overlay) {
+      if (id === "player-overlay") {
+        closePlayer();
+      } else {
+        overlay.remove();
+      }
+    }
   });
 
   document.body.appendChild(overlay);
+
   return { overlay, panel };
 }
 
 function addDetailText(parent, text, className = "") {
   const element = document.createElement("p");
+
   element.textContent = text;
-  if (className) element.className = className;
+
+  if (className) {
+    element.className = className;
+  }
+
   parent.appendChild(element);
+
   return element;
 }
+
+/* DETAILS */
 
 function showDetails(item, type) {
   const { overlay, panel } =
@@ -171,6 +302,7 @@ function showDetails(item, type) {
   heading.textContent = getName(item);
 
   const description = document.createElement("p");
+
   description.textContent =
     getDescription(item) || "لا يوجد وصف متاح حالياً.";
 
@@ -198,26 +330,36 @@ function showDetails(item, type) {
 
   if (type === "movies") {
     panel.appendChild(
-      makeButton("اختيار ملف الفيلم وتشغيله", "primary-button", () => {
-        overlay.remove();
-        chooseLocalVideo(getName(item));
-      })
+      makeButton(
+        "اختيار ملف الفيلم وتشغيله",
+        "primary-button",
+        () => {
+          overlay.remove();
+          chooseLocalVideo(getName(item));
+        }
+      )
     );
   } else {
     renderSeasons(panel, item);
   }
 
   panel.appendChild(
-    makeButton("إغلاق", "secondary-button", () => overlay.remove())
+    makeButton("إغلاق", "secondary-button", () => {
+      overlay.remove();
+    })
   );
 }
+
+/* SERIES SEASONS */
 
 function renderSeasons(panel, item) {
   const episodes = item.episodes;
 
   const heading = document.createElement("h3");
+
   heading.textContent = "المواسم والحلقات";
   heading.style.marginTop = "24px";
+
   panel.appendChild(heading);
 
   if (!episodes || typeof episodes !== "object") {
@@ -239,7 +381,9 @@ function renderSeasons(panel, item) {
     seasonBox.className = "episode-season";
 
     const seasonTitle = document.createElement("h3");
+
     seasonTitle.textContent = "الموسم " + seasonKey;
+
     seasonBox.appendChild(seasonTitle);
 
     const list = document.createElement("div");
@@ -253,10 +397,20 @@ function renderSeasons(panel, item) {
       const row = document.createElement("div");
       row.className = "episode-row";
 
-      const episodeName = document.createElement("span");
+      const episodeInfo = document.createElement("div");
+
+      const episodeName = document.createElement("strong");
+
       episodeName.textContent =
         episode.title ||
         ("الحلقة " + (episode.episode_num || index + 1));
+
+      const episodeNumber = document.createElement("small");
+
+      episodeNumber.textContent =
+        "الحلقة " + (episode.episode_num || index + 1);
+
+      episodeInfo.append(episodeName, episodeNumber);
 
       const playButton = makeButton(
         "اختيار ملف الحلقة",
@@ -268,7 +422,8 @@ function renderSeasons(panel, item) {
         }
       );
 
-      row.append(episodeName, playButton);
+      row.append(episodeInfo, playButton);
+
       list.appendChild(row);
     });
 
@@ -277,16 +432,21 @@ function renderSeasons(panel, item) {
   });
 }
 
+/* LOCAL VIDEO PLAYER */
+
 function chooseLocalVideo(title) {
   const input = document.createElement("input");
+
   input.type = "file";
   input.accept = "video/*,.mkv,.mp4,.avi,.mov,.webm";
 
   input.addEventListener("change", () => {
     const file = input.files && input.files[0];
+
     if (!file) return;
 
     const url = URL.createObjectURL(file);
+
     openPlayer(url, title + " — " + file.name);
   });
 
@@ -304,16 +464,17 @@ function openPlayer(url, title) {
   const top = document.createElement("div");
   top.className = "player-top";
 
-  const heading = document.createElement("h2");
+  const heading = document.createElement("strong");
   heading.textContent = title;
 
-  const close = makeButton("إغلاق", "secondary-button", () => {
+  const close = makeButton("×", "", () => {
     closePlayer();
   });
 
   top.append(heading, close);
 
   const video = document.createElement("video");
+
   video.className = "drama-video";
   video.controls = true;
   video.autoplay = true;
@@ -325,10 +486,6 @@ function openPlayer(url, title) {
   });
 
   panel.append(top, video);
-
-  overlay.addEventListener("click", event => {
-    if (event.target === overlay) closePlayer();
-  });
 }
 
 function closePlayer() {
@@ -336,11 +493,13 @@ function closePlayer() {
 
   if (overlay) {
     const video = overlay.querySelector("video");
+
     if (video) {
       video.pause();
       video.removeAttribute("src");
       video.load();
     }
+
     overlay.remove();
   }
 
@@ -349,6 +508,8 @@ function closePlayer() {
     state.playerUrl = null;
   }
 }
+
+/* RENDER ITEMS */
 
 function renderItems() {
   grid.replaceChildren();
@@ -372,23 +533,31 @@ function renderItems() {
 
   if (filtered.length === 0) {
     const empty = document.createElement("div");
+
     empty.className = "empty-message";
+
     empty.textContent = query
       ? "ما لقينا نتائج مطابقة."
       : "لا توجد عناصر للعرض حالياً.";
+
     grid.appendChild(empty);
   }
 
   loadMoreButton.hidden =
     query.length > 0 ||
-    (state.visibleCount >= state.items.length &&
-     state.loadedParts >= state.currentParts.length);
+    (
+      state.visibleCount >= filtered.length &&
+      state.loadedParts >= state.currentParts.length
+    );
 
-  setStatus(query
-    ? "نتائج البحث: " + filtered.length.toLocaleString("ar")
-    : "تم تحميل " + state.items.length.toLocaleString("ar") + " عنصر"
+  setStatus(
+    query
+      ? "نتائج البحث: " + filtered.length.toLocaleString("ar")
+      : "تم تحميل " + state.items.length.toLocaleString("ar") + " عنصر"
   );
 }
+
+/* LOAD LIBRARY PARTS */
 
 async function loadNextPart() {
   if (state.loading) return;
@@ -399,39 +568,135 @@ async function loadNextPart() {
   }
 
   state.loading = true;
+
   loadMoreButton.disabled = true;
   loadMoreButton.textContent = "جارٍ التحميل...";
 
   try {
     const part = state.currentParts[state.loadedParts];
+
     const data = await fetchJson(DATA_BASE + part.path);
+
     const items = normalizeItems(data);
 
     state.items.push(...items);
+
     state.loadedParts++;
 
     renderItems();
+
   } catch (error) {
     console.error(error);
-    setStatus("تعذر تحميل هذا الجزء. تحقق من الإنترنت وحاول مجدداً.");
+
+    setStatus(
+      "تعذر تحميل هذا الجزء. تحقق من الإنترنت وحاول مجدداً."
+    );
+
   } finally {
     state.loading = false;
+
     loadMoreButton.disabled = false;
     loadMoreButton.textContent = "تحميل المزيد";
   }
 }
 
+/* HOME */
+
+async function openHome() {
+  state.page = "home";
+  state.items = [];
+  state.loadedParts = 0;
+  state.currentParts = [];
+  state.visibleCount = 36;
+  state.search = "";
+
+  searchInput.value = "";
+
+  grid.replaceChildren();
+
+  welcome.hidden = false;
+  loadMoreButton.hidden = true;
+
+  titleBox.textContent = pages.home[0];
+  descriptionBox.textContent = pages.home[1];
+
+  setStatus("جارٍ تحميل مكتبة DramaTV...");
+
+  try {
+    const [movieIndex, seriesIndex] = await Promise.all([
+      getIndex("movies"),
+      getIndex("series")
+    ]);
+
+    const [movieData, seriesData] = await Promise.all([
+      fetchJson(DATA_BASE + movieIndex.parts[0].path),
+      fetchJson(DATA_BASE + seriesIndex.parts[0].path)
+    ]);
+
+    const movies = normalizeItems(movieData).slice(0, 18);
+    const series = normalizeItems(seriesData).slice(0, 18);
+
+    grid.replaceChildren();
+
+    const moviesTitle = document.createElement("div");
+
+    moviesTitle.className = "catalog-heading";
+    moviesTitle.textContent = "أحدث الأفلام";
+
+    grid.appendChild(moviesTitle);
+
+    movies.forEach(item => {
+      grid.appendChild(createCard(item, "movies"));
+    });
+
+    const seriesTitle = document.createElement("div");
+
+    seriesTitle.className = "catalog-heading";
+    seriesTitle.textContent = "المسلسلات";
+
+    grid.appendChild(seriesTitle);
+
+    series.forEach(item => {
+      grid.appendChild(createCard(item, "series"));
+    });
+
+    setStatus(
+      "المكتبة جاهزة — " +
+      Number(movieIndex.total_movies || 0).toLocaleString("ar") +
+      " فيلم و" +
+      Number(seriesIndex.total_series || 0).toLocaleString("ar") +
+      " مسلسل"
+    );
+
+  } catch (error) {
+    console.error(error);
+
+    setStatus(
+      "تعذر تحميل المكتبة. تحقق من اتصال الإنترنت أو توفر البيانات المحفوظة."
+    );
+  }
+}
+
+/* OPEN MOVIES AND SERIES */
+
 async function openCatalog(type) {
+  if (type === "home") {
+    await openHome();
+    return;
+  }
+
   state.page = type;
   state.items = [];
   state.loadedParts = 0;
   state.currentParts = [];
   state.visibleCount = 36;
   state.search = "";
+
   searchInput.value = "";
 
   grid.replaceChildren();
-  welcome.hidden = type !== "home";
+
+  welcome.hidden = true;
 
   document.querySelectorAll(".nav-item").forEach(button => {
     button.classList.toggle(
@@ -444,85 +709,76 @@ async function openCatalog(type) {
   descriptionBox.textContent = pages[type][1];
 
   setStatus("جارٍ الاتصال بمكتبة DramaTV...");
+
   loadMoreButton.hidden = true;
 
   try {
-    if (type === "home") {
-      const movieIndex = await getIndex("movies");
-      const seriesIndex = await getIndex("series");
-
-      const [movieData, seriesData] = await Promise.all([
-        fetchJson(DATA_BASE + movieIndex.parts[0].path),
-        fetchJson(DATA_BASE + seriesIndex.parts[0].path)
-      ]);
-
-      const movies = normalizeItems(movieData).slice(0, 18);
-      const series = normalizeItems(seriesData).slice(0, 18);
-
-      grid.replaceChildren();
-
-      const moviesTitle = document.createElement("div");
-      moviesTitle.className = "catalog-heading";
-      moviesTitle.textContent = "أحدث الأفلام";
-
-      grid.appendChild(moviesTitle);
-      movies.forEach(item => {
-        grid.appendChild(createCard(item, "movies"));
-      });
-
-      const seriesTitle = document.createElement("div");
-      seriesTitle.className = "catalog-heading";
-      seriesTitle.textContent = "المسلسلات";
-
-      grid.appendChild(seriesTitle);
-      series.forEach(item => {
-        grid.appendChild(createCard(item, "series"));
-      });
-
-      setStatus(
-        "المكتبة جاهزة — " +
-        movieIndex.total_movies.toLocaleString("ar") +
-        " فيلم و" +
-        seriesIndex.total_series.toLocaleString("ar") +
-        " مسلسل"
-      );
-
-      return;
-    }
-
     const index = await getIndex(type);
+
     state.currentParts = index.parts;
 
     await loadNextPart();
 
   } catch (error) {
     console.error(error);
-    setStatus("تعذر الاتصال بمكتبة البيانات. حاول مرة أخرى.");
+
+    setStatus(
+      "تعذر الاتصال بمكتبة البيانات. حاول مرة أخرى."
+    );
   }
 }
+
+/* NAVIGATION */
 
 document.querySelectorAll("[data-page]").forEach(button => {
   button.addEventListener("click", () => {
     const page = button.dataset.page;
-    if (pages[page]) openCatalog(page);
+
+    if (pages[page]) {
+      if (page === "home") {
+        document.querySelectorAll(".nav-item").forEach(nav => {
+          nav.classList.toggle(
+            "active",
+            nav.dataset.page === "home"
+          );
+        });
+      }
+
+      openCatalog(page);
+    }
   });
 });
+
+/* WINDOW CONTROLS */
 
 document.querySelectorAll("[data-window-action]").forEach(button => {
   button.addEventListener("click", () => {
     const action = button.dataset.windowAction;
 
-    if (action === "minimize") window.dramaWindow.minimize();
-    if (action === "maximize") window.dramaWindow.maximize();
-    if (action === "close") window.dramaWindow.close();
+    if (action === "minimize") {
+      window.dramaWindow.minimize();
+    }
+
+    if (action === "maximize") {
+      window.dramaWindow.maximize();
+    }
+
+    if (action === "close") {
+      window.dramaWindow.close();
+    }
   });
 });
+
+/* SEARCH */
 
 searchInput.addEventListener("input", () => {
   state.search = searchInput.value;
   state.visibleCount = 100;
+
   renderItems();
 });
+
+/* LOAD MORE */
 
 loadMoreButton.addEventListener("click", async () => {
   if (state.visibleCount < state.items.length) {
@@ -533,12 +789,21 @@ loadMoreButton.addEventListener("click", async () => {
   }
 });
 
+/* KEYBOARD */
+
 document.addEventListener("keydown", event => {
   if (event.key === "Escape") {
     closePlayer();
-    const details = document.getElementById("details-overlay");
-    if (details) details.remove();
+
+    const details =
+      document.getElementById("details-overlay");
+
+    if (details) {
+      details.remove();
+    }
   }
 });
+
+/* START */
 
 openCatalog("home");
