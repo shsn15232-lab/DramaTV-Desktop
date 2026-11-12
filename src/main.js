@@ -2,8 +2,7 @@
 const {
   app,
   BrowserWindow,
-  ipcMain,
-  dialog
+  ipcMain
 } = require("electron");
 
 const path = require("path");
@@ -26,6 +25,7 @@ function createWindow() {
     minHeight: 650,
     backgroundColor: "#070708",
     title: "DramaTV",
+    icon: path.join(__dirname, "..", "DramaTV(1).ico"),
     frame: false,
     autoHideMenuBar: true,
     show: false,
@@ -76,7 +76,6 @@ function createWindow() {
 
 ipcMain.on("window-minimize", event => {
   if (!isTrustedWindow(event)) return;
-
   mainWindow.minimize();
 });
 
@@ -92,7 +91,6 @@ ipcMain.on("window-maximize", event => {
 
 ipcMain.on("window-close", event => {
   if (!isTrustedWindow(event)) return;
-
   mainWindow.close();
 });
 
