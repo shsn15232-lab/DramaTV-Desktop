@@ -12,12 +12,13 @@
     "dist": "electron-builder --win --publish never"
   },
   "devDependencies": {
-    "electron": "^35.0.0",
-    "electron-builder": "^26.0.12"
+    "electron": "35.0.0",
+    "electron-builder": "26.0.12"
   },
   "build": {
     "appId": "com.dramatv.desktop",
     "productName": "DramaTV",
+    "asar": true,
     "directories": {
       "output": "dist"
     },
@@ -29,11 +30,15 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
